@@ -15,7 +15,7 @@ import {
 import { BASE_URL, parseDetailsPage, parsePages, parseSearchPage } from './Parser.ts'
 
 export const NhentaiInfo: SourceInfo = {
-  version: '0.2.0',
+  version: '0.2.1',
   name: 'nhentai.to',
   icon: 'icon.png',
   author: 'Readen',
