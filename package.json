@@ -1,0 +1,20 @@
+{
+  "name": "readen-extensions",
+  "version": "0.1.0",
+  "repositoryName": "Readen",
+  "description": "Extension repo for the Readen manga reader. Paperback 0.8 compatible.",
+  "author": "Readen",
+  "scripts": {
+    "bundle": "npx paperback bundle",
+    "serve": "npx paperback serve",
+    "test": "npx esbuild src/Nhentai/Nhentai.test.ts --bundle --platform=node --format=cjs --outfile=tmp/Nhentai.test.cjs --log-level=error && node --test tmp/Nhentai.test.cjs"
+  },
+  "dependencies": {
+    "@paperback/types": "^0.8.7"
+  },
+  "devDependencies": {
+    "@paperback/toolchain": "^0.8.7",
+    "esbuild": "^0.28.2",
+    "typescript": "^4.9.5"
+  }
+}
