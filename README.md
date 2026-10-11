@@ -8,6 +8,15 @@ every extension here also loads in the Paperback app — and any Paperback
 The app ships empty: users add repo URLs, install sources, then browse and
 read. Readen hosts no content.
 
+## Install
+
+[Click here to add to Paperback](https://atrueperson.github.io/readen-extensions/)
+
+Or add this repo URL manually in Paperback → Settings → External
+Sources → Edit → +:
+
+`https://atrueperson.github.io/readen-extensions/`
+
 ## Layout
 
 - `src/Nhentai/` — reference source for nhentai.to (`Nhentai.ts`,
