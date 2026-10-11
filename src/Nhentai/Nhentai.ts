@@ -12,18 +12,10 @@ import {
   SourceIntents,
   SourceManga
 } from '@paperback/types'
-import {
-  BASE_URL,
-  NhGallery,
-  NhSearch,
-  coverUrl,
-  galleryTitle,
-  pageUrl,
-  tagGroups
-} from './Parser.ts'
+import { BASE_URL, parseDetailsPage, parsePages, parseSearchPage } from './Parser.ts'
 
 export const NhentaiInfo: SourceInfo = {
-  version: '0.1.0',
+  version: '0.2.0',
   name: 'nhentai.to',
   icon: 'icon.png',
   author: 'Readen',
@@ -44,7 +36,7 @@ export class Nhentai extends Source {
         request.headers = {
           ...(request.headers ?? {}),
           Referer: `${BASE_URL}/`,
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Readen/0.1'
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Readen/0.2'
         }
         return request
       },
@@ -52,7 +44,7 @@ export class Nhentai extends Source {
     }
   })
 
-  private async getJson<T>(path: string): Promise<T> {
+  private async getHtml(path: string): Promise<string> {
     const response = await this.requestManager.schedule(
       App.createRequest({ url: `${BASE_URL}${path}`, method: 'GET' }),
       1
@@ -63,71 +55,89 @@ export class Nhentai extends Source {
     if (response.status >= 400 || typeof response.data !== 'string') {
       throw new Error(`nhentai request failed (${response.status})`)
     }
-    return JSON.parse(response.data) as T
+    return response.data
+  }
+
+  private async getDetails(mangaId: string) {
+    const $ = this.cheerio.load(await this.getHtml(`/g/${mangaId}/`))
+    return parseDetailsPage($, mangaId)
   }
 
   override async getSearchResults(query: SearchRequest, metadata: any): Promise<PagedResults> {
-    const page: number = metadata?.page ?? 1
-    const data = await this.getJson<NhSearch>(
-      `/api/galleries/search?query=${encodeURIComponent(query.title ?? '')}&page=${page}`
-    )
-    const tiles = (data.result ?? []).map(g =>
-      App.createPartialSourceManga({
-        mangaId: String(g.id),
-        title: galleryTitle(g),
-        image: coverUrl(g.media_id, g.images.cover.t),
-        subtitle: undefined
+    const title = (query.title ?? '').trim()
+    if (/^\d+$/.test(title)) {
+      const details = await this.getDetails(title)
+      return App.createPagedResults({
+        results: [
+          App.createPartialSourceManga({
+            mangaId: details.id,
+            title: details.title,
+            image: details.cover,
+            subtitle: undefined
+          })
+        ],
+        metadata: undefined
       })
+    }
+    const page: number = metadata?.page ?? 1
+    const html = await this.getHtml(
+      `/search?q=${encodeURIComponent(title || '*')}&page=${page}`
     )
+    const { tiles, hasNextPage } = parseSearchPage(this.cheerio.load(html))
     return App.createPagedResults({
-      results: tiles,
-      metadata: page < data.num_pages ? { page: page + 1 } : undefined
+      results: tiles.map(t =>
+        App.createPartialSourceManga({
+          mangaId: t.mangaId,
+          title: t.title,
+          image: t.image,
+          subtitle: undefined
+        })
+      ),
+      metadata: hasNextPage ? { page: page + 1 } : undefined
     })
   }
 
   async getMangaDetails(mangaId: string): Promise<SourceManga> {
-    const g = await this.getJson<NhGallery>(`/api/gallery/${mangaId}`)
+    const d = await this.getDetails(mangaId)
     return App.createSourceManga({
-      id: String(g.id),
+      id: d.id,
       mangaInfo: App.createMangaInfo({
-        image: coverUrl(g.media_id, g.images.cover.t),
-        titles: [g.title.pretty, g.title.english, g.title.japanese].filter(
-          (t): t is string => !!t
-        ),
+        image: d.cover,
+        titles: [d.title, d.altTitle].filter((t): t is string => !!t),
         status: 'Completed',
-        desc: `${g.num_pages} pages`,
+        desc: d.pageCount > 0 ? `${d.pageCount} pages` : '',
         hentai: true,
-        tags: tagGroups(g).map(section =>
+        tags: d.tags.map(section =>
           App.createTagSection({
             id: section.id,
             label: section.label,
             tags: section.tags.map(t => App.createTag(t))
           })
         ),
-        covers: [coverUrl(g.media_id, g.images.cover.t)]
+        covers: d.cover ? [d.cover] : []
       })
     })
   }
 
   async getChapters(mangaId: string): Promise<Chapter[]> {
-    const g = await this.getJson<NhGallery>(`/api/gallery/${mangaId}`)
+    const d = await this.getDetails(mangaId)
     return [
       App.createChapter({
-        id: String(g.id),
+        id: d.id,
         chapNum: 1,
-        name: galleryTitle(g),
-        time: new Date(g.upload_date * 1000),
+        name: d.title,
+        time: d.uploadTime,
         sortingIndex: 0
       })
     ]
   }
 
   async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
-    const g = await this.getJson<NhGallery>(`/api/gallery/${chapterId}`)
+    const $ = this.cheerio.load(await this.getHtml(`/g/${chapterId}/`))
     return App.createChapterDetails({
-      id: String(g.id),
-      mangaId: String(g.id),
-      pages: g.images.pages.map((p, i) => pageUrl(g.media_id, i, p.t))
+      id: chapterId,
+      mangaId: chapterId,
+      pages: parsePages($)
     })
   }
 
